@@ -119,6 +119,8 @@ pub enum RendererError {
         target: FrameSize,
         overlay: FrameSize,
     },
+    #[error("all SHM buffer slots are still in use by the compositor")]
+    BufferSlotsBusy,
     #[error(transparent)]
     Io(#[from] std::io::Error),
     #[error(transparent)]

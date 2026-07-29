@@ -37,6 +37,7 @@ impl SessionLockHandler for CurtainApp {
         self.screen_off.arm(session_locked_at);
         self.maybe_notify_ready();
         self.flush_pending_pre_ready_redraw(qh);
+        self.flush_pending_deferred_redraw(qh);
     }
 
     fn finished(

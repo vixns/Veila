@@ -105,9 +105,15 @@ impl CurtainApp {
                     if self.avatar_path != path {
                         continue;
                     }
-                    tracing::info!(elapsed_ms, "loaded deferred curtain avatar image");
-                    self.ui_shell.set_avatar(asset);
                     self.avatar_load_started = false;
+                    if !self.ui_shell.set_avatar(asset) {
+                        tracing::debug!(
+                            elapsed_ms,
+                            "skipping redundant deferred avatar reload"
+                        );
+                        continue;
+                    }
+                    tracing::info!(elapsed_ms, "loaded deferred curtain avatar image");
                     self.render_all_surfaces(queue_handle);
                 }
                 BackgroundEvent::Failed { error, elapsed_ms } => {
@@ -125,8 +131,22 @@ impl CurtainApp {
             return;
         }
 
+        let Some(path) = self.avatar_path.clone() else {
+            return;
+        };
+
+        if veila_ui::load_cached_avatar(Some(path.clone())).cache_key()
+            == self.ui_shell.avatar_cache_key()
+        {
+            tracing::debug!(
+                path = %path.display(),
+                "avatar cache already matches shell; skipping deferred reload"
+            );
+            return;
+        }
+
         self.avatar_load_started = true;
-        spawn_avatar_loader(self.avatar_path.clone(), self.background_sender.clone());
+        spawn_avatar_loader(Some(path), self.background_sender.clone());
     }
 
     pub(crate) fn maybe_start_background_render(&mut self) {

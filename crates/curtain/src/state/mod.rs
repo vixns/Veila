@@ -226,6 +226,7 @@ pub(crate) struct CurtainApp {
     pub(crate) post_ready_nonfirst_renders: u32,
     pub(crate) post_ready_memory_logged: bool,
     pub(crate) pending_pre_ready_redraw: bool,
+    pub(crate) pending_deferred_redraw: bool,
     pub(crate) first_frame_committed_at: Option<Instant>,
 }
 
@@ -466,12 +467,14 @@ impl CurtainApp {
             post_ready_nonfirst_renders: 0,
             post_ready_memory_logged: false,
             pending_pre_ready_redraw: false,
+            pending_deferred_redraw: false,
             first_frame_committed_at: None,
             lock_acquisition_started: false,
         })
     }
 
     pub(crate) fn acquire_lock(&mut self, queue_handle: &QueueHandle<Self>) -> Result<()> {
+        self.wait_for_outputs()?;
         let outputs: Vec<_> = self.output_state.outputs().collect();
         if outputs.is_empty() {
             bail!("no Wayland outputs found");
@@ -492,6 +495,30 @@ impl CurtainApp {
         tracing::info!(surfaces = self.lock_surfaces.len(), "created lock surfaces");
         self.maybe_start_background_render();
         Ok(())
+    }
+
+    fn wait_for_outputs(&mut self) -> Result<()> {
+        const MAX_ATTEMPTS: usize = 100;
+        for attempt in 0..MAX_ATTEMPTS {
+            if self.output_state.outputs().next().is_some() {
+                if attempt > 0 {
+                    tracing::debug!(
+                        attempt,
+                        "Wayland outputs became available after registry roundtrip"
+                    );
+                }
+                return Ok(());
+            }
+
+            self.connection
+                .flush()
+                .context("failed to flush Wayland connection while waiting for outputs")?;
+            self.connection
+                .roundtrip()
+                .context("failed to roundtrip while waiting for Wayland outputs")?;
+        }
+
+        bail!("no Wayland outputs found after waiting for registry events");
     }
 
     pub(crate) fn create_surface_for_output(
@@ -638,12 +665,8 @@ impl CurtainApp {
         self.secondary_outputs_powered_off = false;
         self.pending_pre_ready_redraw = true;
 
-        for surface in &mut self.lock_surfaces {
-            surface.background_path = None;
-            surface.background = None;
-            surface.scene_base = None;
-            surface.scene_base_revision = 0;
-            surface.scene_base_has_layers = false;
+        for index in 0..self.lock_surfaces.len() {
+            self.reset_lock_surface_render_state(index);
         }
 
         Ok(())
@@ -687,9 +710,9 @@ impl CurtainApp {
         {
             tracing::info!("releasing session lock");
             session_lock.unlock();
-            self.connection
-                .roundtrip()
-                .context("failed to roundtrip after unlocking session")?;
+            if let Err(error) = self.connection.roundtrip() {
+                tracing::warn!("failed to roundtrip after unlocking session: {error:#}");
+            }
         }
 
         Ok(())

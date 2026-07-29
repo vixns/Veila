@@ -31,7 +31,7 @@ struct BufferSlot {
     buffer: Option<wl_buffer::WlBuffer>,
 }
 
-const MAX_BUFFER_SLOTS: usize = 2;
+const MAX_BUFFER_SLOTS: usize = 3;
 
 impl ShmBufferRelease {
     pub fn mark_released(&self) {
@@ -235,13 +235,9 @@ impl SurfaceBufferPool {
         }
 
         if self.slots.len() >= MAX_BUFFER_SLOTS {
-            let index = self.next_slot % self.slots.len();
-            if let Some(buffer) = self.slots[index].buffer.take() {
-                buffer.destroy();
-            }
-            self.slots[index].released.store(false, Ordering::Release);
-            self.next_slot = (index + 1) % self.slots.len();
-            return Ok(index);
+            // Never destroy a wl_buffer still attached to a surface — that races
+            // the compositor (Broken pipe / protocol error) under bursty redraws.
+            return Err(RendererError::BufferSlotsBusy);
         }
 
         let index = self.slots.len();
@@ -321,7 +317,7 @@ mod tests {
     }
 
     #[test]
-    fn pool_growth_is_capped_to_two_frame_slots() {
-        assert_eq!(MAX_BUFFER_SLOTS, 2);
+    fn pool_growth_is_capped_to_three_frame_slots() {
+        assert_eq!(MAX_BUFFER_SLOTS, 3);
     }
 }

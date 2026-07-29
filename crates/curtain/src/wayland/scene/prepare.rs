@@ -354,7 +354,11 @@ impl CurtainApp {
             .static_scene_cache_variant(scale.max(1) as u32)
     }
 
-    fn render_static_scene_overlay(&mut self, buffer: &mut impl PixelBuffer, scale: u32) -> bool {
+    pub(crate) fn render_static_scene_overlay(
+        &mut self,
+        buffer: &mut impl PixelBuffer,
+        scale: u32,
+    ) -> bool {
         if !self.ready_notified && self.ui_shell.has_visual_layers() {
             self.ui_shell
                 .render_static_overlay_without_layers_scaled(buffer, scale);
@@ -389,12 +393,17 @@ impl CurtainApp {
     }
 
     fn slideshow_transition_preserves_surface(&self, index: usize) -> bool {
+        // Require an actual scene_base. A background-only surface after output
+        // churn (NVIDIA resume) must rebuild — otherwise render hits
+        // "scene base buffer is unavailable" and drops into emergency UI.
         self.slideshow_transition
             .as_ref()
-            .is_some_and(|transition| transition.is_loading() && {
-                self.lock_surfaces
-                    .get(index)
-                    .is_some_and(|surface| surface.scene_base.is_some() || surface.background.is_some())
+            .is_some_and(|transition| {
+                transition.is_loading()
+                    && self
+                        .lock_surfaces
+                        .get(index)
+                        .is_some_and(|surface| surface.scene_base.is_some())
             })
     }
 }
