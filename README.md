@@ -8,6 +8,7 @@
 ![GitHub Repo stars](https://img.shields.io/github/stars/naurissteins/veila?style=for-the-badge&labelColor=181825&color=f9e2af)
 
 Veila is built for wlroots-style compositors like labwc, Niri, Hyprland, Sway, MangoWC and others that support the Wayland ext-session-lock-v1 protocol. Its main goal is to provide a secure, fast and elegant lock screen without relying on heavyweight UI stacks.
+
 </div>
 
 <a href="https://github.com/user-attachments/assets/3b523594-dc4e-428e-8564-a619148973ee" target="_blank">
@@ -25,7 +26,7 @@ Veila is built for wlroots-style compositors like labwc, Niri, Hyprland, Sway, M
 
 </div>
 
-----
+---
 
 ## 🔥 Features
 
@@ -41,7 +42,9 @@ Veila is built for wlroots-style compositors like labwc, Niri, Hyprland, Sway, M
 - Lightweight design without a heavy desktop UI toolkit
 
 ## Install
+
 ### Arch Linux
+
 On Arch Linux, install Veila from the AUR:
 
 ```bash
@@ -74,6 +77,17 @@ veila lock
 
 ### NixOS
 
+**Nixpkgs (recommended):**
+
+Veila is available in the official [Nixpkgs unstable repository](https://search.nixos.org/packages?channel=unstable&query=veila#show=veila). Add it and the required PAM service to your NixOS configuration:
+
+```nix
+{
+  environment.systemPackages = with pkgs; [ veila ];
+  security.pam.services.veila = {};
+}
+```
+
 **Flake installation:**
 
 ```nix
@@ -86,7 +100,15 @@ veila lock
       modules = [
         veila.nixosModules.default
         {
-          programs.veila.enable = true;
+          programs.veila = {
+            enable = true;
+            service.enable = true;
+            idle = {
+              enable = true;
+              lockAfter = 300;
+              lockBeforeSleep = true;
+            };
+          };
         }
       ];
     };
@@ -94,7 +116,7 @@ veila lock
 }
 ```
 
-The module installs `veila`, `veilad` and `veila-curtain` and configures the required PAM service.
+The module installs `veila`, `veilad` and `veila-curtain`, configures the required PAM service, and (when enabled) sets up the `veilad` and idle systemd user services.
 
 **Install directly:**
 
@@ -113,6 +135,36 @@ Add PAM service:
   security.pam.services.veila = {};
 }
 ```
+
+**Home Manager:**
+
+Import `veila.homeModules.default` to install Veila and manage the config file and user services.
+
+```nix
+{
+  imports = [ veila.homeModules.default ];
+
+  programs.veila = {
+    enable = true;
+    service.enable = true;
+    settings = {
+      theme = "santorini";
+    };
+    idle = {
+      enable = true;
+      lockAfter = 300;
+      lockBeforeSleep = true;
+    };
+  };
+}
+```
+
+> [!IMPORTANT]
+> Home Manager cannot set up PAM, so password unlock needs one line in your system (NixOS) configuration:
+>
+> ```nix
+> security.pam.services.veila = {};
+> ```
 
 ## Docs
 
